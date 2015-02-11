@@ -12,6 +12,7 @@ http://github.com/GreenSteam/pep257
 
 """
 from __future__ import with_statement
+from distutils.command.check import check
 
 import os
 import sys
@@ -821,6 +822,10 @@ def validate_options(options):
     if options.convention and not hasattr(Conventions, options.convention):
         return False
     return True
+
+
+def get_checked_error_codes(options):
+    return ['D100']
 
 
 def run_pep257():
