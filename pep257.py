@@ -825,7 +825,31 @@ def validate_options(options):
 
 
 def get_checked_error_codes(options):
-    return ['D100']
+    codes = set(ErrorRegistry.get_error_codes())
+    if options.ignore:
+        checked_codes = codes - set(options.ignore.split(','))
+    elif options.select:
+        checked_codes = set(options.select.split(','))
+    elif options.convention:
+        checked_codes = getattr(Conventions, options.convention)
+    else:
+        checked_codes = Conventions.pep257
+    checked_codes -= set(options.add_ignore.split(','))
+    checked_codes |= set(options.add_select.split(','))
+    return checked_codes - set('')
+
+
+def validate_options(options):
+    mutually_exclusive = ('ignore', 'select', 'convention')
+    for opt1, opt2 in itertools.permutations(mutually_exclusive, 2):
+        if getattr(options, opt1) and getattr(options, opt2):
+            log.error('Cannot pass both {} and {}. They are '
+                      'mutually exclusive.'.format(opt1, opt2))
+            return False
+    if options.convention and not hasattr(Conventions, options.convention):
+        return False
+    return True
+
 
 
 def run_pep257():
