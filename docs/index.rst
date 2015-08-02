@@ -19,7 +19,7 @@ Contents:
    error_codes
    release_notes
    license
-
+   module
 
 .. include:: quickstart.rst
 
@@ -29,4 +29,3 @@ Credits
 Created by Vladimir Keleshev.
 
 Maintained by Amir Rachum.
-
