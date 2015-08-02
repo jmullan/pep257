@@ -17,6 +17,7 @@ from distutils.command.check import check
 import os
 import sys
 import logging
+import token
 import tokenize as tk
 from itertools import takewhile, dropwhile, chain
 from optparse import OptionParser
@@ -228,19 +229,7 @@ class TokenStream(object):
             self.move()
 
 
-class AllError(Exception):
-
-    def __init__(self, message):
-        Exception.__init__(
-            self, message +
-            'That means pep257 cannot decide which definitions are public. '
-            'Variable __all__ should be present at most once in each file, '
-            "in form `__all__ = ('a_public_function', 'APublicClass', ...)`. "
-            'More info on __all__: http://stackoverflow.com/q/44834/. ')
-
-
 class Parser(object):
-
     def __call__(self, filelike, filename):
         self.source = filelike.readlines()
         src = ''.join(self.source)
@@ -353,10 +342,16 @@ class Parser(object):
         assert self.current.value == '__all__'
         self.consume(tk.NAME)
         if self.current.value != '=':
-            raise AllError('Could not evaluate contents of __all__. ')
+            raise AllError('Could not evaluate contents of __all__.',
+                           self.filename,
+                           self.line,
+                           self.source[self.line - 1])
         self.consume(tk.OP)
         if self.current.value not in '([':
-            raise AllError('Could not evaluate contents of __all__. ')
+            raise AllError('Could not evaluate contents of __all__.',
+                           self.filename,
+                           self.line,
+                           self.source[self.line - 1])
         if self.current.value == '[':
             msg = ("%s WARNING: __all__ is defined as a list, this means "
                    "pep257 cannot reliably detect contents of the __all__ "
@@ -378,9 +373,15 @@ class Parser(object):
             elif (self.current.kind == tk.STRING or
                   self.current.value == ','):
                 all_content += self.current.value
+            elif self.current.kind == tk.NAME:
+                all_content += "'%s'" % self.current.value
             else:
                 kind = token.tok_name[self.current.kind]
-                raise AllError('Unexpected token kind in  __all__: %s' % kind)
+                raise AllError(
+                    'Unexpected token kind in  __all__: %s' % kind,
+                    self.filename,
+                    self.line,
+                    self.source[self.line - 1])
             self.stream.move()
         self.consume(tk.OP)
         all_content += ")"
@@ -389,7 +390,10 @@ class Parser(object):
         except BaseException as e:
             raise AllError('Could not evaluate contents of __all__.'
                            '\bThe value was %s. The exception was:\n%s'
-                           % (all_content, e))
+                           % (all_content, e),
+                           self.filename,
+                           self.line,
+                           self.source[self.line - 1])
 
     def parse_module(self):
         """Parse a module (and its children) and return a Module object."""
@@ -523,6 +527,25 @@ class Error(object):
 
     def __lt__(self, other):
         return (self.filename, self.line) < (other.filename, other.line)
+
+
+class AllError(Exception):
+    code = 'ALL'
+    definition = '__all__ = ...'
+    explanation = (
+        'That means pep257 cannot decide which definitions are public. '
+        'Variable __all__ should be present at most once in each file, '
+        "in form `__all__ = ('a_public_function', 'APublicClass', ...)`. "
+        'More info on __all__: http://stackoverflow.com/q/44834/. '
+    )
+    lines = 'Source not available'
+
+    def __init__(self, message, filename, line, source):
+        Exception.__init__(self, message + ' ' + self.explanation)
+        self._message = message
+        self._filename = filename
+        self._line = line
+        self._source = source
 
 
 class ErrorRegistry(object):
@@ -795,33 +818,6 @@ def setup_stream_handlers(options):
     stderr_handler = logging.StreamHandler(sys.stderr)
     stderr_handler.setLevel(logging.WARNING)
     log.addHandler(stderr_handler)
-
-
-def get_checked_error_codes(options):
-    codes = set(ErrorRegistry.get_error_codes())
-    if options.ignore:
-        checked_codes = codes - set(options.ignore.split(','))
-    elif options.select:
-        checked_codes = set(options.select.split(','))
-    elif options.convention:
-        checked_codes = getattr(Conventions, options.convention)
-    else:
-        checked_codes = Conventions.pep257
-    checked_codes -= set(options.add_ignore.split(','))
-    checked_codes |= set(options.add_select.split(','))
-    return checked_codes - set('')
-
-
-def validate_options(options):
-    mutually_exclusive = ('ignore', 'select', 'convention')
-    for opt1, opt2 in itertools.permutations(mutually_exclusive, 2):
-        if getattr(options, opt1) and getattr(options, opt2):
-            log.error('Cannot pass both {0} and {1}. They are '
-                      'mutually exclusive.'.format(opt1, opt2))
-            return False
-    if options.convention and not hasattr(Conventions, options.convention):
-        return False
-    return True
 
 
 def get_checked_error_codes(options):
