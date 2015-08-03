@@ -377,8 +377,6 @@ class Parser(object):
             elif (self.current.kind == tk.STRING or
                   self.current.value == ','):
                 all_content += self.current.value
-            elif self.current.kind == tk.NAME:
-                all_content += "'%s'" % self.current.value
             else:
                 kind = token.tok_name[self.current.kind]
                 raise AllError(
